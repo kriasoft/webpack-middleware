@@ -1,8 +1,10 @@
-# webpack-dev-middleware
+# webpack-middleware
 
-**THIS MIDDLEWARE SHOULD ONLY USED FOR DEVELOPMENT!**
+> Run Webpack compiler as Express.js/Browsersync middleware
 
-**DO NOT USE IT IN PRODUCTION!**
+**Note**: *This is a fork from [webpack-dev-middleware](https://github.com/webpack/webpack-dev-middleware)
+with the only difference that it supports configurations with mixed
+web/node.js bundles (great for isomorphic apps).*
 
 ## What is it?
 
@@ -14,24 +16,41 @@ It has a few advantages over bundling it as files:
 * If files changed in watch mode, the middleware no longer serves the old bundle, but delays requests until the compiling has finished. You don't have to wait before refreshing the page after a file modification.
 * I may add some specific optimization in future releases.
 
-## Usage
+## Getting Started
 
 ``` javascript
-var webpackMiddleware = require("webpack-dev-middleware");
-app.use(webpackMiddleware(...));
+import webpack from 'webpack';
+import webpackMiddleware from 'webpack-middleware';
+import webpackConfig from './webpack.config.js'; // <- array of Webpack configs
+import runNode from './runNode.js';
+
+// Launch Webpack compiler in watch mode
+const wp = webpackMiddleware(webpack(webpackConfig));
+
+// Launch Node.js app in a child process
+runNode('./build/server.js').then(() => {
+  // Launch Browsersync dev server in proxy mode
+  const bs = require('browser-sync').create();
+  bs.init({
+    proxy: {
+      target: 'localhost:3000', // <- where Node.js app is running
+      middleware: [wp]
+    }
+  });
+}, (err) => console.error(err));
 ```
 
-Example usage:
+### Configuration Options
 
 ``` javascript
 app.use(webpackMiddleware(webpack({
 	// webpack options
 	// webpackMiddleware takes a Compiler object as first parameter
 	// which is returned by webpack(...) without callback.
-	entry: "...",
+	entry: '...',
 	output: {
-		path: "/"
-		// no real path is required, just pass "/"
+		path: '/'
+		// no real path is required, just pass '/'
 		// but it will work with other paths too.
 	}
 }), {
@@ -53,16 +72,22 @@ app.use(webpackMiddleware(webpack({
 	},
 	// watch options (only lazy: false)
 
-	publicPath: "/assets/",
+	publicPath: '/assets/',
 	// public path to bind the middleware to
 	// use the same as in webpack
 
-	headers: { "X-Custom-Header": "yes" },
+	headers: { 'X-Custom-Header': 'yes' },
 	// custom headers
 
 	stats: {
 		colors: true
 	}
-	// options for formating the statistics
+	// options for formatting the statistics
 }));
 ```
+
+## Related Projects
+
+ * [Webpack](http://webpack.github.io/) — JavaScript module bundler
+ * [React Starter Kit](https://github.com/kriasoft/react-starter-kit) — Isomorphic web application boilerplate
+ * [isomorphic-style-loader](https://github.com/kriasoft/isomorphic-style-loader) — Isomorphic CSS styles loader for Webpack
