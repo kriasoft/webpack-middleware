@@ -1,6 +1,6 @@
 {
   "name": "webpack-middleware",
-  "version": "1.4.0",
+  "version": "1.5.1",
   "author": "Tobias Koppers @sokra",
   "contributors": [
     "Konstantin Tarkus <hello@tarkus.me>"

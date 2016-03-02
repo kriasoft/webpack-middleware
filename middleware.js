@@ -2,9 +2,10 @@
 	MIT License http://www.opensource.org/licenses/mit-license.php
 	Author Tobias Koppers @sokra
 */
-var path = require("path");
 var MemoryFileSystem = require("memory-fs");
 var mime = require("mime");
+
+var HASH_REGEXP = /[0-9a-f]{10,}/;
 
 // constructor for the middleware
 module.exports = function(compiler, options) {
@@ -23,7 +24,7 @@ module.exports = function(compiler, options) {
 			var str = options.filename
 				.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&")
 				.replace(/\\\[[a-z]+\\\]/ig, ".+");
-			options.filename = new RegExp("^" + str + "$");
+			options.filename = new RegExp("^[\/]{0,1}" + str + "$");
 		}
 	}
 
@@ -119,7 +120,7 @@ module.exports = function(compiler, options) {
 	function ready(fn, req) {
 		if(state) return fn();
 		if(!options.noInfo && !options.quiet)
-			console.log("webpack: wait until bundle finished: " + req.url);
+			console.log("webpack: wait until bundle finished: " + (req.url || fn.name));
 		callbacks.push(fn);
 	}
 
@@ -174,13 +175,22 @@ module.exports = function(compiler, options) {
 		if(options.lazy && (!options.filename || options.filename.test(filename)))
 			rebuild();
 
+		if(HASH_REGEXP.test(filename)) {
+			try {
+				if(fs.statSync(filename).isFile()) {
+					processRequest();
+					return;
+				}
+			} catch(e) {}
+		}
 		// delay the request until we have a vaild bundle
-		ready(function() {
+		ready(processRequest, req);
+		function processRequest() {
 			try {
 				var stat = fs.statSync(filename);
 				if(!stat.isFile()) {
 					if (stat.isDirectory()) {
-						filename = path.join(filename, "index.html");
+						filename = pathJoin(filename, "index.html");
 						stat = fs.statSync(filename);
 						if(!stat.isFile()) throw "next";
 					} else {
@@ -201,15 +211,29 @@ module.exports = function(compiler, options) {
 					res.setHeader(name, options.headers[name]);
 				}
 			}
-			res.end(content);
-		}, req);
+			if (res.send) res.send(content);
+			else res.end(content);
+		}
 	}
 
 	webpackDevMiddleware.getFilenameFromUrl = getFilenameFromUrl;
 
-	webpackDevMiddleware.invalidate = function() {
-		if(watching) watching.invalidate();
+	webpackDevMiddleware.waitUntilValid = function(callback) {
+		callback = callback || function(){};
+		if (!watching || !watching.running) callback();
+		else ready(callback, {});
 	};
+
+	webpackDevMiddleware.invalidate = function(callback) {
+		callback = callback || function(){};
+		if(watching) {
+			ready(callback, {});
+			watching.invalidate();
+		} else {
+			callback();
+		}
+	};
+
 	webpackDevMiddleware.close = function(callback) {
 		callback = callback || function(){};
 		if(watching) watching.close(callback);
