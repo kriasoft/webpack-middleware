@@ -4,6 +4,7 @@
 */
 var MemoryFileSystem = require("memory-fs");
 var mime = require("mime");
+var parseRange = require("range-parser");
 
 var HASH_REGEXP = /[0-9a-f]{10,}/;
 
@@ -166,6 +167,34 @@ module.exports = function(compiler, options) {
 		return filename ? pathJoin(outputPath, filename) : outputPath;
 	}
 
+	function handleRangeHeaders(content, req, res) {
+		if (req.headers['Accept-Ranges']) res.setHeader('Accept-Ranges', 'bytes');
+		if (req.headers.range) {
+			var ranges = parseRange(content.length, req.headers.range);
+
+			// unsatisfiable
+			if (-1 == ranges) {
+				res.setHeader('Content-Range', 'bytes */' + content.length);
+				res.statusCode = 416;
+				return content;
+			}
+
+			// valid (syntactically invalid/multiple ranges are treated as a regular response)
+			if (-2 != ranges && ranges.length === 1) {
+				// Content-Range
+				res.statusCode = 206;
+				var length = content.length;
+				res.setHeader(
+					'Content-Range',
+					'bytes ' + ranges[0].start + '-' + ranges[0].end + '/' + length
+				);
+
+				content = content.slice(ranges[0].start, ranges[0].end + 1);
+			}
+		}
+		return content;
+	}
+
 	// The middleware function
 	function webpackDevMiddleware(req, res, next) {
 		var filename = getFilenameFromUrl(req.url);
@@ -203,6 +232,7 @@ module.exports = function(compiler, options) {
 
 			// server content
 			var content = fs.readFileSync(filename);
+			content = handleRangeHeaders(content, req, res);
 			res.setHeader("Access-Control-Allow-Origin", "*"); // To support XHR, etc.
 			res.setHeader("Content-Type", mime.lookup(filename));
 			res.setHeader("Content-Length", content.length);
